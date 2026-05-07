@@ -140,6 +140,9 @@ local function startRobbery(ped, drugItem, drugCount)
     stolenDrugItem   = drugItem
     stolenDrugCount  = drugCount
 
+    -- Strip any previous target interactions (e.g. "Sell to Customer") before adding robbery ones
+    removeTargetFromEntity(ped)
+
     ClearPedTasks(ped)
     SetBlockingOfNonTemporaryEvents(ped, true)
     SetPedFleeAttributes(ped, 0, false)
@@ -526,9 +529,9 @@ RegisterNetEvent('flake_drugselling:spawnBuyer', function()
             local ep = GetEntityCoords(buyerData.ped)
 
             if #(ep - pp) < 10.0 then
-                -- Weapon drawn check
+                -- Spook only when actively aiming a weapon, not just having one equipped
                 local weapon = GetSelectedPedWeapon(PlayerPedId())
-                if weapon ~= GetHashKey("WEAPON_UNARMED") then
+                if weapon ~= GetHashKey("WEAPON_UNARMED") and IsPlayerFreeAiming(PlayerId()) then
                     spookedAlready = true
                 end
 
