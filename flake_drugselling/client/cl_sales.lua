@@ -140,7 +140,7 @@ local function startRobbery(ped, drugItem, drugCount)
     stolenDrugItem   = drugItem
     stolenDrugCount  = drugCount
 
-    -- Strip any previous target interactions (e.g. "Sell to Customer") before adding robbery ones
+    -- Remove any previous target interactions before the chase starts
     removeTargetFromEntity(ped)
 
     ClearPedTasks(ped)
@@ -160,81 +160,25 @@ local function startRobbery(ped, drugItem, drugCount)
 
     TaskGoStraightToCoord(ped, fleeTarget.x, fleeTarget.y, fleeTarget.z, 3.5, 30000, 0.5, 0.0)
 
-    if Config.System == "ox_target" then
-        exports.ox_target:addLocalEntity(ped, {
-            {
-                name   = "flake_drugselling:knockoutRobber",
-                icon   = "fa-solid fa-hand-fist",
-                label  = "Take Drugs Back",
-                distance = 2.0,
-                canInteract = function(entity, distance)
-                    return isRobberyActive and distance < 2.0
-                end,
-                onSelect = function()
-                    knockoutRobber(ped)
-                end
-            }
-        })
-    elseif Config.System == "qb-target" then
-        exports["qb-target"]:AddTargetEntity(ped, {
-            options = {
-                {
-                    icon   = "fa-solid fa-hand-fist",
-                    label  = "Take Drugs Back",
-                    action = function()
-                        knockoutRobber(ped)
-                    end
-                }
-            },
-            distance = 2.0
-        })
-    end
+    -- No interaction on a living robbery ped — prompt only appears after they are killed
 
     Citizen.CreateThread(function()
         local startTime = GetGameTimer()
         local timeout   = 60000
 
-        -- ── Chase phase ──────────────────────────────────────────────────
+        -- ── Chase phase: just track the ped, no interaction until dead ────
         while isRobberyActive and DoesEntityExist(ped) do
-            -- If the ped was shot dead, drop into the loot phase immediately
             if IsPedDeadOrDying(ped, true) then break end
 
-            if Config.System == "textui" then
-                local pp   = GetEntityCoords(PlayerPedId())
-                local ep   = GetEntityCoords(ped)
-                if #(ep - pp) < 2.0 then
-                    Config.showTextUI('[E] - Take Drugs Back')
-                    Wait(0)
-                    if IsControlJustPressed(1, 38) then
-                        Config.hideTextUI()
-                        knockoutRobber(ped)
-                        return
-                    end
-                else
-                    Config.hideTextUI()
-                    Wait(500)
-                    if not IsPedInAnyVehicle(ped) then
-                        local pp2 = GetEntityCoords(PlayerPedId())
-                        local ep2 = GetEntityCoords(ped)
-                        local d2  = ep2 - pp2
-                        if #d2 < 0.5 then d2 = vector3(1.0, 0.0, 0.0) end
-                        local ft  = ep2 + (d2 / #d2) * 40.0
-                        if GetGameTimer() % 3000 < 600 then
-                            TaskGoStraightToCoord(ped, ft.x, ft.y, ft.z, 3.5, 5000, 0.5, 0.0)
-                        end
-                    end
-                end
-            else
-                Wait(500)
-                if not IsPedInAnyVehicle(ped) then
-                    local pp  = GetEntityCoords(PlayerPedId())
-                    local ep  = GetEntityCoords(ped)
-                    local d2  = ep - pp
-                    if #d2 < 0.5 then d2 = vector3(1.0, 0.0, 0.0) end
-                    local ft  = ep + (d2 / #d2) * 40.0
-                    if GetGameTimer() % 3000 < 600 then
-                        TaskGoStraightToCoord(ped, ft.x, ft.y, ft.z, 3.5, 5000, 0.5, 0.0)
-                    end
+            Wait(500)
+            if not IsPedInAnyVehicle(ped) then
+                local pp = GetEntityCoords(PlayerPedId())
+                local ep = GetEntityCoords(ped)
+                local d2 = ep - pp
+                if #d2 < 0.5 then d2 = vector3(1.0, 0.0, 0.0) end
+                local ft = ep + (d2 / #d2) * 40.0
+                if GetGameTimer() % 3000 < 600 then
+                    TaskGoStraightToCoord(ped, ft.x, ft.y, ft.z, 3.5, 5000, 0.5, 0.0)
                 end
             end
 
@@ -318,47 +262,6 @@ local function startRobbery(ped, drugItem, drugCount)
             stolenDrugCount = 0
         end
     end)
-end
-
-function knockoutRobber(ped)
-    if not isRobberyActive or not ped or not DoesEntityExist(ped) then return end
-
-    removeTargetFromEntity(ped)
-    Config.hideTextUI()
-
-    ClearPedTasks(ped)
-    SetPedToRagdoll(ped, 3000, 3000, 0, false, false, false)
-
-    local playerPed = PlayerPedId()
-
-    RequestAnimDict("anim@gangops@facility@yacht@goon_search@ground@")
-    while not HasAnimDictLoaded("anim@gangops@facility@yacht@goon_search@ground@") do
-        Wait(0)
-    end
-    TaskPlayAnim(playerPed, "anim@gangops@facility@yacht@goon_search@ground@", "low_crouch_idle", 8.0, -8.0, 2200, 1, 0, false, false, false)
-
-    Wait(2200)
-    ClearPedTasks(playerPed)
-
-    TriggerServerEvent("flake_drugselling:server:returnStolenDrugs", stolenDrugItem, stolenDrugCount)
-    Config.Notify(string.format("You took your %s x%d back!", stolenDrugItem, stolenDrugCount), "success")
-
-    isRobberyActive = false
-    local savedPed  = robberyPed
-    robberyPed      = nil
-    stolenDrugItem  = nil
-    stolenDrugCount = 0
-
-    Citizen.SetTimeout(3000, function()
-        hardDeletePed(savedPed)
-    end)
-
-    if isSelling then
-        Wait(5000)
-        if not isSaleAnimating then
-            TriggerEvent("flake_drugselling:spawnBuyer")
-        end
-    end
 end
 
 -- ============================================================
