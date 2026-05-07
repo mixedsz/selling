@@ -433,6 +433,7 @@ RegisterNetEvent('flake_drugselling:spawnBuyer', function()
     end
 
     local spawnTime      = GetGameTimer()
+    local deathCheckStart = GetGameTimer() + 2500  -- grace period: ped needs time to fully initialize
     local pedHitCount    = 0
     local spookedAlready = false
 
@@ -494,7 +495,7 @@ RegisterNetEvent('flake_drugselling:spawnBuyer', function()
         while true do
             if not buyerSpawned or currentBuyerPed ~= buyerData.ped then break end
 
-            if IsPedDeadOrDying(buyerData.ped, true) then
+            if GetGameTimer() > deathCheckStart and IsPedDeadOrDying(buyerData.ped, true) then
                 Config.Notify("The buyer was killed!", "error")
                 removeTargetFromEntity(buyerData.ped)
                 hardDeletePed(buyerData.ped)
