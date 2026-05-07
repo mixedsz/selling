@@ -191,25 +191,18 @@ local function startRobbery(ped, drugItem, drugCount)
         local startTime = GetGameTimer()
         local timeout   = 60000
 
+        -- ── Chase phase ──────────────────────────────────────────────────
         while isRobberyActive and DoesEntityExist(ped) do
-            Wait(500)
-
-            if not IsPedInAnyVehicle(ped) then
-                local pp  = GetEntityCoords(PlayerPedId())
-                local ep  = GetEntityCoords(ped)
-                local d2  = ep - pp
-                if #d2 < 0.5 then d2 = vector3(1.0, 0.0, 0.0) end
-                local ft  = ep + (d2 / #d2) * 40.0
-                if GetGameTimer() % 3000 < 600 then
-                    TaskGoStraightToCoord(ped, ft.x, ft.y, ft.z, 3.5, 5000, 0.5, 0.0)
-                end
-            end
+            -- If the ped was shot dead, drop into the loot phase immediately
+            if IsPedDeadOrDying(ped, true) then break end
 
             if Config.System == "textui" then
                 local pp   = GetEntityCoords(PlayerPedId())
                 local ep   = GetEntityCoords(ped)
                 if #(ep - pp) < 2.0 then
                     Config.showTextUI('[E] - Take Drugs Back')
+                    -- Wait(0) so IsControlJustPressed is checked every frame
+                    Wait(0)
                     if IsControlJustPressed(1, 38) then
                         Config.hideTextUI()
                         knockoutRobber(ped)
@@ -217,6 +210,29 @@ local function startRobbery(ped, drugItem, drugCount)
                     end
                 else
                     Config.hideTextUI()
+                    Wait(500)
+                    if not IsPedInAnyVehicle(ped) then
+                        local pp2 = GetEntityCoords(PlayerPedId())
+                        local ep2 = GetEntityCoords(ped)
+                        local d2  = ep2 - pp2
+                        if #d2 < 0.5 then d2 = vector3(1.0, 0.0, 0.0) end
+                        local ft  = ep2 + (d2 / #d2) * 40.0
+                        if GetGameTimer() % 3000 < 600 then
+                            TaskGoStraightToCoord(ped, ft.x, ft.y, ft.z, 3.5, 5000, 0.5, 0.0)
+                        end
+                    end
+                end
+            else
+                Wait(500)
+                if not IsPedInAnyVehicle(ped) then
+                    local pp  = GetEntityCoords(PlayerPedId())
+                    local ep  = GetEntityCoords(ped)
+                    local d2  = ep - pp
+                    if #d2 < 0.5 then d2 = vector3(1.0, 0.0, 0.0) end
+                    local ft  = ep + (d2 / #d2) * 40.0
+                    if GetGameTimer() % 3000 < 600 then
+                        TaskGoStraightToCoord(ped, ft.x, ft.y, ft.z, 3.5, 5000, 0.5, 0.0)
+                    end
                 end
             end
 
@@ -237,7 +253,69 @@ local function startRobbery(ped, drugItem, drugCount)
             end
         end
 
-        if not DoesEntityExist(ped) and isRobberyActive then
+        -- ── Loot phase (ped shot dead) ────────────────────────────────────
+        if isRobberyActive and DoesEntityExist(ped) and IsPedDeadOrDying(ped, true) then
+            ClearPedTasks(ped)
+            Config.Notify("He's down! Loot the body for your drugs!", "inform")
+
+            local lootEnd = GetGameTimer() + 20000
+
+            if Config.System == "textui" then
+                while isRobberyActive and DoesEntityExist(ped) and GetGameTimer() < lootEnd do
+                    local pp = GetEntityCoords(PlayerPedId())
+                    local ep = GetEntityCoords(ped)
+                    if #(ep - pp) < 2.0 then
+                        Config.showTextUI('[E] - Loot Drugs Back')
+                        Wait(0)
+                        if IsControlJustPressed(1, 38) then
+                            Config.hideTextUI()
+                            removeTargetFromEntity(ped)
+                            TriggerServerEvent("flake_drugselling:server:returnStolenDrugs", stolenDrugItem, stolenDrugCount)
+                            Config.Notify(string.format("You took your %s x%d back!", stolenDrugItem, stolenDrugCount), "success")
+                            isRobberyActive = false
+                            robberyPed      = nil
+                            stolenDrugItem  = nil
+                            stolenDrugCount = 0
+                            Citizen.SetTimeout(2000, function() hardDeletePed(ped) end)
+                            if isSelling then
+                                Wait(5000)
+                                if not isSaleAnimating then TriggerEvent("flake_drugselling:spawnBuyer") end
+                            end
+                            return
+                        end
+                    else
+                        Config.hideTextUI()
+                        Wait(100)
+                    end
+                end
+                Config.hideTextUI()
+            else
+                -- ox_target / qb-target: existing "Take Drugs Back" interaction remains on the entity;
+                -- just hold open the loot window so the entity isn't deleted before the player uses it
+                while isRobberyActive and DoesEntityExist(ped) and GetGameTimer() < lootEnd do
+                    Wait(250)
+                end
+            end
+
+            -- Loot window expired or ped despawned without being looted
+            if isRobberyActive then
+                Config.Notify("He died with your drugs...", "error")
+                removeTargetFromEntity(ped)
+                isRobberyActive = false
+                robberyPed      = nil
+                stolenDrugItem  = nil
+                stolenDrugCount = 0
+                Citizen.SetTimeout(1000, function() hardDeletePed(ped) end)
+                if isSelling then
+                    Wait(5000)
+                    TriggerEvent("flake_drugselling:spawnBuyer")
+                end
+            end
+            return
+        end
+
+        -- Ped vanished without robbery being resolved (edge case)
+        if isRobberyActive then
             isRobberyActive = false
             robberyPed      = nil
             stolenDrugItem  = nil
