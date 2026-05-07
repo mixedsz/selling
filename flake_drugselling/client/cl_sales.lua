@@ -204,7 +204,6 @@ local function startRobbery(ped, drugItem, drugCount)
                 local ep   = GetEntityCoords(ped)
                 if #(ep - pp) < 2.0 then
                     Config.showTextUI('[E] - Take Drugs Back')
-                    -- Wait(0) so IsControlJustPressed is checked every frame
                     Wait(0)
                     if IsControlJustPressed(1, 38) then
                         Config.hideTextUI()
@@ -259,46 +258,40 @@ local function startRobbery(ped, drugItem, drugCount)
         -- ── Loot phase (ped shot dead) ────────────────────────────────────
         if isRobberyActive and DoesEntityExist(ped) and IsPedDeadOrDying(ped, true) then
             ClearPedTasks(ped)
+            -- Remove any target interactions (ox_target / qb-target don't reliably work on dead peds)
+            removeTargetFromEntity(ped)
             Config.Notify("He's down! Loot the body for your drugs!", "inform")
 
             local lootEnd = GetGameTimer() + 20000
 
-            if Config.System == "textui" then
-                while isRobberyActive and DoesEntityExist(ped) and GetGameTimer() < lootEnd do
-                    local pp = GetEntityCoords(PlayerPedId())
-                    local ep = GetEntityCoords(ped)
-                    if #(ep - pp) < 2.0 then
-                        Config.showTextUI('[E] - Loot Drugs Back')
-                        Wait(0)
-                        if IsControlJustPressed(1, 38) then
-                            Config.hideTextUI()
-                            removeTargetFromEntity(ped)
-                            TriggerServerEvent("flake_drugselling:server:returnStolenDrugs", stolenDrugItem, stolenDrugCount)
-                            Config.Notify(string.format("You took your %s x%d back!", stolenDrugItem, stolenDrugCount), "success")
-                            isRobberyActive = false
-                            robberyPed      = nil
-                            stolenDrugItem  = nil
-                            stolenDrugCount = 0
-                            Citizen.SetTimeout(2000, function() hardDeletePed(ped) end)
-                            if isSelling then
-                                Wait(5000)
-                                if not isSaleAnimating then TriggerEvent("flake_drugselling:spawnBuyer") end
-                            end
-                            return
-                        end
-                    else
+            -- Use proximity E-press for ALL systems on a dead ped
+            while isRobberyActive and DoesEntityExist(ped) and GetGameTimer() < lootEnd do
+                local pp = GetEntityCoords(PlayerPedId())
+                local ep = GetEntityCoords(ped)
+                if #(ep - pp) < 2.0 then
+                    Config.showTextUI('[E] - Take Drugs Back')
+                    Wait(0)
+                    if IsControlJustPressed(1, 38) then
                         Config.hideTextUI()
-                        Wait(100)
+                        TriggerServerEvent("flake_drugselling:server:returnStolenDrugs", stolenDrugItem, stolenDrugCount)
+                        Config.Notify(string.format("You took your %s x%d back!", stolenDrugItem, stolenDrugCount), "success")
+                        isRobberyActive = false
+                        robberyPed      = nil
+                        stolenDrugItem  = nil
+                        stolenDrugCount = 0
+                        Citizen.SetTimeout(2000, function() hardDeletePed(ped) end)
+                        if isSelling then
+                            Wait(5000)
+                            if not isSaleAnimating then TriggerEvent("flake_drugselling:spawnBuyer") end
+                        end
+                        return
                     end
-                end
-                Config.hideTextUI()
-            else
-                -- ox_target / qb-target: existing "Take Drugs Back" interaction remains on the entity;
-                -- just hold open the loot window so the entity isn't deleted before the player uses it
-                while isRobberyActive and DoesEntityExist(ped) and GetGameTimer() < lootEnd do
-                    Wait(250)
+                else
+                    Config.hideTextUI()
+                    Wait(100)
                 end
             end
+            Config.hideTextUI()
 
             -- Loot window expired or ped despawned without being looted
             if isRobberyActive then
