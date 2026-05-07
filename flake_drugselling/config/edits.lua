@@ -97,8 +97,8 @@ Config.Notifications = {
 
 
 --TEXT UI
-Config.showTextUI = function()
-    lib.showTextUI('[E] - Sell to Customer', {
+Config.showTextUI = function(message)
+    lib.showTextUI(message or '[E] - Sell to Customer', {
         iconAnimation = 'fade',
         icon = 'people-carry-box',
         iconColor = 'red',
